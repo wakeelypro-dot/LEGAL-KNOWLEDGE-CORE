@@ -1,0 +1,27 @@
+# LKC workspace root .gitignore
+
+# Secrets — NEVER commit environment files (DB password, API keys live here)
+.env
+.env.local
+.env.*.local
+.env.*.development
+.env.*.production
+!.env.example
+
+# Node / deps (covers lkc-app at root scope too)
+node_modules/
+
+# Build output
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+
+# Vercel
+.vercel/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
