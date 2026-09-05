@@ -275,6 +275,12 @@ UNVERIFIED                 no verification possible (e.g. external/unindexed inp
 
 `verification_status` is returned on the answer endpoint (`API.md` §4.4). High-risk or insufficiently-verified outputs set `requires_human_review = true` (`PRD` §51).
 
+**Implementation (Phase 6, `lib/answer.ts`):** with no model-in-the-loop, verification is **deterministic and structural**. `determineVerificationStatus(passages)`:
+- no passages → `INSUFFICIENT_AUTHORITY` (the proposition lacks supporting authority);
+- every passage `CITED` **and** on a `TIER_1`/`TIER_2` source → `CITED` (authority fidelity, §9.2);
+- otherwise (any `PARTIAL`/`UNVERIFIED` passage, or authority below the tier floor) → `PARTIAL`.
+`requires_human_review = true` whenever the status is not `CITED`. Each emitted citation resolves to a real provision + document version in the retrieval surface and is rendered with the §8.1 fields (`tests/citation-tests.ts`, TESTING.md §4). LLM-driven semantic verification remains a Phase-6+ extension point; the structural rule is the approved baseline.
+
 ---
 
 ## 9. Evaluation & Gold-Standard Metrics

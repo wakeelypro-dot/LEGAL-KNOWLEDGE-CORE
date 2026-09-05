@@ -25,12 +25,15 @@ export interface RetrievalOptions {
 
 export interface RetrievedProvision {
   provision_id: string;
+  document_version_id: string;
+  version_no: number;
   provision_no: string;
   heading: string | null;
   body_text: string;
   position: number;
   effective_from: string;
   effective_until: string | null;
+  publication_date: string | null;
   verification_status: string;
   doc_title_ar: string;
   doc_title_en: string | null;
@@ -83,8 +86,10 @@ function hardFilters(
 }
 
 const PROV_SELECT = `
-      p.id AS provision_id, p.provision_no, p.heading, p.body_text, p.position,
+      p.id AS provision_id, dv.id AS document_version_id, dv.version_no AS version_no,
+      p.provision_no, p.heading, p.body_text, p.position,
       p.effective_from, to_char(p.effective_until,'YYYY-MM-DD') AS effective_until,
+      to_char(dv.publication_date,'YYYY-MM-DD') AS publication_date,
       p.verification_status, dv.title_ar AS doc_title_ar, dv.title_en AS doc_title_en,
       dv.official_number, s.url AS source_url, s.authority_tier, j.code AS jurisdiction_code`;
 

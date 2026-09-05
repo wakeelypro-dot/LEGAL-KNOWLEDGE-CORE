@@ -150,6 +150,13 @@ It is a Phase 0 architecture document. It is the sequencing plan — it does **n
 - `verification_status` is populated correctly (`CITED | PARTIAL | INSUFFICIENT_AUTHORITY | UNVERIFIED`) (`RAG.md` §8.3).
 - Insufficiently-verified or high-risk outputs set `requires_human_review` (`SKILLS.md` §6; `API.md` §4.4).
 
+**Progress (2026-09-05):**
+- **Deterministic verification rule** (`lib/answer.ts` `determineVerificationStatus`, per `RAG.md` §8.3): an answer is CITED only when every grounding passage is `CITED` on a TIER_1/TIER_2 source (authority fidelity); any weaker/`UNVERIFIED` grounding downgrades to `PARTIAL`; zero retrieved passages ⇒ `INSUFFICIENT_AUTHORITY`. `requires_human_review = true` whenever status ≠ CITED. With no model-in-the-loop, citation verification is structural by design; no proposition is ever asserted as authoritative without a retrieved supporting provision.
+- **Citations carry full traceable provenance** (`RAG.md` §8.1): each citation now resolves to provision + document version (`document_version_id`, `version_no`) and exposes `jurisdiction_code`, `publication_date`, `effective_from/until`, a rendered Arabic `citation_text` (`doc_title_ar — مادة N`), `authority_tier`, and byte-exact body `quote`. Retrieval rows gain `document_version_id`/`version_no`/`publication_date` (`lib/retrieval.ts`).
+- **`verification_status` returned on the answer endpoint** (`API.md` §4.4): `POST /api/v1/legal/answer` now emits it alongside `requires_human_review` (was spec-only until now).
+- **Tests:** `tests/citation-tests.ts` (20 checks — `TESTING.md` §4): verification-rule units, canonical ENUM set, every emitted citation resolves inside `v_public_retrieval_corpus`, citation set ⊆ retrieved set (no ungrounded references), citation rows exist+CITED in DB, provenance fields, `INSUFFICIENT_AUTHORITY`/`PARTIAL` ⇒ human review, `buildCitations` fidelity, corpus restore. Full suite green: citation 20/20, retrieval 14/14, ingestion 24/24, registry 34/34, security 19/19, relationships 20/20. Eval unchanged on new provenance fields: P@5 `.192`, R@5 `.958`, cite `.917`, isolation 0/24.
+- **Scope note:** sourced-text verification and court/case/statutory-history citation types remain later phases (`DATABASE.md` §6.6); Phase 6 delivered the answer-path verification contract + integrity tests on the existing `ARTICLE` envelopes.
+
 ---
 
 ## 10. Phase 7 — Skills Framework

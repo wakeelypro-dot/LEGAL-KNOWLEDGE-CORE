@@ -77,6 +77,7 @@ export async function POST(req: NextRequest) {
       jurisdiction,
       answer: result.answer,
       citations: result.citations,
+      verification_status: result.verification_status,
       requires_human_review: result.requiresHumanReview,
       mode: result.mode,
       jurisdictions_returned: result.jurisdictions,
