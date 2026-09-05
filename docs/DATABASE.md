@@ -132,10 +132,13 @@ Provision (article/paragraph/item) rows — the unit of retrieval.
 | `fts` | tsvector | keyword index column — GENERATED on the live DB (PoC bootstrap expression over heading/body; ingestion never sets it). GIN index. Retrieval uses `plainto_tsquery('simple', …)`. |
 
 ### 6.6 `legal_relationships` & `legal_citations`
-- `legal_relationships` — `(parent_provision_id, child_provision_id, relationship_type)` UNIQUE; types per `relationship_type` enum (amendment/repeal model lives here; population is Phase 4+).
-- `legal_citations` — citation metadata per provision (`citation_type`, `source_url`, `publication_date`, `effective_date`, `authority_tier`, `verification_status`); population is Phase 6.
-
-Both carry `visibility_scope` (0002) and are RLS-protected.
+- `legal_relationships` — `(parent_provision_id, child_provision_id, relationship_type)` UNIQUE (0009); types per `relationship_type` enum. **Populated by the ingest Relate stage** (INGESTION.md §4.4) for the Jordan corpus:
+  - `REFERENCES` — same-document cross-article edges extracted from provision body text (single `المادة (N)`, dual `المادتين (N) و(M)`, numbered-paragraph `N/M` targets; Arabic prepositional forms `للمادة`/`بالمادة`/`والمادة`; self-references and unresolved numbers never become edges).
+  - `PART_OF` — a numbered-paragraph provision (`N/M`) edges to its base article `N`.
+  - Amendment/repeal types (`AMENDS`, `REPEALS`, …) are modeled by the enum and reserved for the amendments phase (ROADMAP.md §9); not yet populated.
+- `legal_citations` — citation metadata per provision (`citation_type`, `source_url`, `publication_date`, `effective_date`, `authority_tier`, `verification_status`); `UNIQUE(provision_id, citation_type)` (0009). **Populated in Phase 4:** one `ARTICLE` envelope per provision at publish, with `authority_tier` inherited from the source lineage and `effective_date` from the document version. Sourced text verification, court/case citations, and statutory-history citations land in Phase 6 (ROADMAP.md §9).
+- Indexes (0009): `idx_relationships_parent`, `idx_relationships_child`, `idx_relationships_type`, `idx_legal_citations_jurisdiction`.
+- Covered by `tests/relationships-tests.ts`; both carry `visibility_scope` (0002) and are RLS-protected.
 
 ### 6.7 `embeddings`
 | Column | Type | Notes |

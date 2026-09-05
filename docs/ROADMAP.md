@@ -2,7 +2,7 @@
 # Legal Knowledge Core (LKC) — Phased Development Roadmap
 
 **Version:** 1.0
-**Status:** Phases 0–3 delivered; Phase 4 (RAG engine scale-out) next
+**Status:** Phases 0–3 delivered; Phase 4 in progress — 2 laws live (Civil Code, Labour Law), relationships & citations populated
 **Last Updated:** 2026-09-05
 **Owner:** Lead Architect (AI Agent)
 **Companion Documents:** ARCHITECTURE.md, DATABASE.md, SECURITY.md, RAG.md
@@ -109,6 +109,14 @@ It is a Phase 0 architecture document. It is the sequencing plan — it does **n
 - Provisions structured per the legal hierarchy (`DATABASE.md` §6.5).
 - Versioning/append-only honored; amendments and relationships modeled (`DATABASE.md` §6.6).
 - Corpus reaches / exceeds the minimum validated size set for Jordan activation (`JURISDICTIONS.md` §3.2).
+
+**Progress (2026-09-05):**
+- **Live corpus:** Jordan Civil Code No. 43 of 1976 (extract) + Jordanian Labour Law No. 8 of 1996 (48-article curated selection) — 56 public provisions across 2 documents, both `TIER_1_PRIMARY_OFFICIAL` via the Legislation and Opinion Bureau source.
+- **References & citations implemented** (`lib/ingest/references.ts`; INGESTION.md §4.4): same-document cross-article `REFERENCES` edges (single, dual, numbered-paragraph forms; Arabic prepositional markers like `للمادة`/`بالمادة` handled; self-references and unresolved numbers dropped), `PART_OF` edges for `N/M` provisions, and one `ARTICLE` citation envelope per provision (authority tier + effective date carried from source lineage). Migration `0009` adds idempotency constraints + indexes.
+- **Versioning is per-document semantics, per-source serial:** `version_no` remains a source-relative ordinal (UNIQUE(source_id, version_no)); `change_summary` is document-accurate ("Initial import" unless a prior version exists for the same `official_number`, otherwise a provision-level diff vs that prior version). Pipeline step 7b implements this; no prior version of the Labour Law exists, so it is recorded as an initial import.
+- **Tests:** `tests/relationships-tests.ts` (20 checks — extraction unit cases, citation envelope fields, edge correctness incl. self-ref/unresolved suppression, PART_OF, idempotent re-ingest, corpus-restore). Ingestion 24/24, registry 34/34, security 19/19 all green on the live DB.
+- **Eval re-baseline:** with the 48 Labour Law provisions joining the vector space, Civil-Code-only gold-standard metrics shifted mechanically — P@5 .192→.150, R@5 .958→.750, citation accuracy stable, jurisdiction isolation 0/24. Noted for Phase 5 (retrieval tuning/reranking) where the activation threshold applies.
+- **Known limitation:** sourced full text carries no chapter headers, so Labour Law provisions are `chapter = NULL` (nothing fabricated); cited `حيثيات` etc. belong to later phases.
 
 ---
 

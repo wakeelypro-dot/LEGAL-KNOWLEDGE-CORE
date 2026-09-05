@@ -64,6 +64,8 @@ export interface IngestReport {
   documentVersionId: string | null;
   provisionsIngested: number;
   provisionsEmbedded: number;
+  relationships: number;
+  citations: number;
   sourceHash: string;
   versionHash: string;
   gates: GateResult[];

@@ -1,7 +1,12 @@
 // Ingestion pipeline (INGESTION.md §1, §3-§7).
 //
 //   Source → Fetch → Hash → Parse → Structure → Classify → Validate
-//         → Version → Publish → Embed → Index
+//         → Version → Publish → Relate → Embed → Index
+//
+// - Relate (INGESTION.md §3.4): a published version is refined into its
+//   relationship graph — cross-article REFERENCES edges, PART_OF edges for
+//   numbered-paragraph provisions, and one legal_citations envelope per
+//   provision (DATABASE.md §6.6). Idempotent (migration 0009).
 //
 // - Idempotent: re-ingesting identical raw bytes with the same source is a
 //   no-op (source_hash / version_hash, INGESTION.md §5).
@@ -19,6 +24,7 @@ import { classifyDocType, classifyLanguage } from "./classifier";
 import { runQualityGates, gatesAllPass, GateContext } from "./validator";
 import { sourceHash, versionHash, canonicalDocumentContent } from "./hash";
 import { embed, vectorLiteral, EMBEDDING_DIMENSIONS } from "../embeddings";
+import { publishRelationshipsAndCitations } from "./references";
 
 type JurisdictionRow = Record<string, unknown> & {
   id: string;
@@ -161,6 +167,8 @@ export async function ingestDocument(opts: PipelineOptions): Promise<IngestRepor
       documentVersionId: existing[0].id,
       provisionsIngested: 0,
       provisionsEmbedded: 0,
+      relationships: 0,
+      citations: 0,
       sourceHash: rawHash,
       versionHash: versionHashValue,
       gates,
@@ -185,6 +193,8 @@ export async function ingestDocument(opts: PipelineOptions): Promise<IngestRepor
       documentVersionId: sameVersion[0].id,
       provisionsIngested: 0,
       provisionsEmbedded: 0,
+      relationships: 0,
+      citations: 0,
       sourceHash: rawHash,
       versionHash: versionHashValue,
       gates,
@@ -200,16 +210,24 @@ export async function ingestDocument(opts: PipelineOptions): Promise<IngestRepor
   const versionNo = last[0].v + 1;
 
   // ---- 7b. Provision-level change summary (INGESTION.md §6.2) ----
-  // Diff vs the previous version (Modified / Added / Repealed) when this is
-  // not the first version; "initial import" for version 1.
+  // The version series is PER DOCUMENT (keyed by official_number within a
+  // source), not per source: a new law published by the same body is an
+  // "Initial import", never a "version 2" of the previous law. The diff runs
+  // against the prior version of THIS document when one exists.
   let changeSummary = "Initial import";
-  if (versionNo > 1) {
+  const prevDoc = await query<{ v: number }>(
+    `SELECT version_no AS v FROM document_versions
+     WHERE source_id = $1 AND official_number IS NOT DISTINCT FROM $2
+     ORDER BY version_no DESC LIMIT 1`,
+    [source.id, opts.meta.official_number ?? null]
+  );
+  if (prevDoc.length > 0) {
     const prev = await query<Record<string, unknown> & { provision_no: string; body_text: string }>(
       `SELECT provision_no, body_text FROM legal_provisions
        WHERE document_version_id = (
          SELECT id FROM document_versions WHERE source_id = $1 AND version_no = $2)
        ORDER BY position`,
-      [source.id, versionNo - 1]
+      [source.id, prevDoc[0].v]
     );
     const prevMap = new Map(prev.map((p) => [p.provision_no, normalizeText(p.body_text)]));
     let modified = 0;
@@ -226,7 +244,7 @@ export async function ingestDocument(opts: PipelineOptions): Promise<IngestRepor
     if (added > 0) parts.push(`${added} added`);
     if (modified > 0) parts.push(`${modified} modified`);
     if (repealed > 0) parts.push(`${repealed} repealed`);
-    changeSummary = `Version ${versionNo}: ${
+    changeSummary = `Version ${prevDoc[0].v + 1}: ${
       parts.length > 0 ? parts.join(", ") : "no provision-level change"
     }`;
   }
@@ -285,12 +303,25 @@ export async function ingestDocument(opts: PipelineOptions): Promise<IngestRepor
     ingested += 1;
   }
 
-  // ---- 10. Embed + index (idempotent) ----
-  let embedded = 0;
-  const provRows = await query<{ id: string; heading: string | null; body_text: string }>(
-    `SELECT id, heading, body_text FROM legal_provisions WHERE document_version_id = $1 ORDER BY position`,
+  // ---- 9.5 Relate: relationship graph + citation envelopes (idempotent) ----
+  // Same provision rows feed the relational edge stage and the embedding stage.
+  const provRows = await query<{ id: string; provision_no: string; heading: string | null; body_text: string }>(
+    `SELECT id, provision_no, heading, body_text FROM legal_provisions WHERE document_version_id = $1 ORDER BY position`,
     [documentVersionId]
   );
+  const graph = await publishRelationshipsAndCitations({
+    documentVersionId,
+    jurisdictionId: jurisdiction.id,
+    titleAr: normalizeText(opts.meta.title_ar),
+    titleEn: opts.meta.title_en ?? null,
+    sourceUrl: source.url,
+    authorityTier: source.authority_tier,
+    effectiveDate: doc.effectiveFrom,
+    provisions: provRows.map((p) => ({ id: p.id, no: p.provision_no, text: p.body_text })),
+  });
+
+  // ---- 10. Embed + index (idempotent) ----
+  let embedded = 0;
   for (const p of provRows) {
     const text = `${p.heading ? p.heading + "\n" : ""}${p.body_text}`.trim();
     const [vec] = await embed([text]);
@@ -311,6 +342,8 @@ export async function ingestDocument(opts: PipelineOptions): Promise<IngestRepor
     documentVersionId,
     provisionsIngested: ingested,
     provisionsEmbedded: embedded,
+    relationships: graph.relationships,
+    citations: graph.citations,
     sourceHash: rawHash,
     versionHash: versionHashValue,
     gates,
@@ -327,6 +360,8 @@ function rejected(...reasons: string[]): IngestReport {
     documentVersionId: null,
     provisionsIngested: 0,
     provisionsEmbedded: 0,
+    relationships: 0,
+    citations: 0,
     sourceHash: "",
     versionHash: "",
     gates: [],

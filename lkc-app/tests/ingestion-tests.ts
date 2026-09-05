@@ -86,6 +86,25 @@ async function main() {
          AND d.source_id = s.id AND s.name LIKE 'Ingestion Test Source %'`
     );
     await query(
+      `DELETE FROM legal_citations WHERE provision_id IN
+         (SELECT p.id FROM legal_provisions p
+          JOIN document_versions d ON d.id = p.document_version_id
+          JOIN legal_sources s ON s.id = d.source_id
+          WHERE s.name LIKE 'Ingestion Test Source %')`
+    );
+    await query(
+      `DELETE FROM legal_relationships WHERE parent_provision_id IN
+         (SELECT p.id FROM legal_provisions p
+          JOIN document_versions d ON d.id = p.document_version_id
+          JOIN legal_sources s ON s.id = d.source_id
+          WHERE s.name LIKE 'Ingestion Test Source %')
+       OR child_provision_id IN
+         (SELECT p.id FROM legal_provisions p
+          JOIN document_versions d ON d.id = p.document_version_id
+          JOIN legal_sources s ON s.id = d.source_id
+          WHERE s.name LIKE 'Ingestion Test Source %')`
+    );
+    await query(
       `DELETE FROM legal_provisions WHERE document_version_id IN
          (SELECT d.id FROM document_versions d JOIN legal_sources s ON d.source_id = s.id
           WHERE s.name LIKE 'Ingestion Test Source %')`

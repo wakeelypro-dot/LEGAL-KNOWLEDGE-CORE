@@ -26,7 +26,7 @@ End-to-end flow (`ARCHITECTURE.md` §5.3, `PRD` §45):
 ```text
 Source → Fetch → Download → Hash → Parse → OCR (if needed) →
 Structure → Classify → Validate → Version → Publish →
-Chunk → Embed → Index
+Relate → Embed → Index
 ```
 
 Goals:
@@ -118,6 +118,13 @@ Validation confirms the document is fit and correct **before** it can become aut
 
 Validation status gates the move toward publishing (§9).
 
+### 4.4 Relate — References & Citation Graph
+After a version passes validation, the **Relate** stage populates the intra-document graph before embedding (`lib/ingest/references.ts`; `DATABASE.md` §6.6):
+- **Cross-article references** → `REFERENCES` edges. `extractArticleReferences` parses provision body text for single (`المادة (N)`), dual (`المادتين (N) و(M)`), and numbered-paragraph (`N/M`) forms, including Arabic prepositional markers (`للمادة`, `بالمادة`, `والمادة`, `كالمادة`, `فالمادة`). Only same-document, resolvable targets are published; **self-references and unresolved numbers never become edges**.
+- **Numbered paragraphs** → a provision numbered `N/M` also receives a `PART_OF` edge from its base article `N`.
+- **Citation envelope** → one `legal_citations` row per provision (`citation_type = ARTICLE`, `verification_status = CITED`) carrying `authority_tier` from the source lineage and `effective_date` from the document version.
+- All inserts are `ON CONFLICT DO NOTHING`, so re-publishing the same document (idempotent re-ingest) never duplicates edges or envelopes. Covered by `tests/relationships-tests.ts`.
+
 ---
 
 ## 5. Versioning & Idempotency
@@ -139,6 +146,8 @@ Each `document_versions` row carries (`DATABASE.md` §6.4):
 - `publication_date`
 - `status` (`DRAFT | PUBLISHED | ACTIVE | REPEALED | SUPERSEDED | ARCHIVED`)
 - `source_url`, `source_hash`, `raw_content`, `parsed_content`, `change_summary`
+
+**Version series:** `version_number` is a source-relative ordinal (`UNIQUE(source_id, version_number)`), so documents sharing a source form one append-only series. `change_summary` is **document-accurate** rather than series-relative: the pipeline records `Initial import` when no prior version exists for the same `official_number`, and otherwise a provision-level diff (Modified/Added/Repealed) against that document's prior version.
 
 **Rule:** new versions are **inserted**, never replacing or mutating earlier rows. Historical provisions are never rewritten.
 
@@ -176,18 +185,19 @@ Changed  → New version → Legal diff → Affected provisions → Re-index
 
 ---
 
-## 7. Publish → Chunk → Embed → Index (Hand-off to RAG)
+## 7. Publish → Relate → Embed → Index (Hand-off to RAG)
 
 After a version passes validation and quality gates (§9):
 
 ```text
-Publish → Chunk → Embed → Index
+Publish → Relate → Embed → Index
 ```
 
 ### 7.1 Publish
 - The version's `status` is set to `PUBLISHED`/`ACTIVE` (or `ARCHIVED` for historical-only).
 - Write is delegated to the **server-elevated path** only (`SECURITY.md` §10); never from a client.
 - Publication is recorded in `audit_logs` (`SECURITY.md` §12).
+- Immediately after publish, the **Relate** stage (§4.4) writes the reference/citation graph for the published provisions.
 
 ### 7.2 Chunk
 - Apply the RAG chunking strategy (`RAG.md` §2): legal-structure-first (Article → Paragraph → Item), never cross article boundaries unless explicitly required.

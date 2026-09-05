@@ -82,16 +82,18 @@ Raw legal sources are represented by `legal_sources` rows (per jurisdiction) and
 `lib/ingest/pipeline.ts` turns raw text into structured, versioned, provenance-backed provisions:
 
 ```
-Source → Fetch → Hash → Parse → Structure → Classify → Validate → Version → Publish → Chunk → Embed → Index
+Source → Fetch → Hash → Parse → Structure → Classify → Validate → Version → Publish → Relate → Embed → Index
 ```
 
 - **Parse/Structure** — `parser.ts` recognizes article markers (`المادة N` / `Article N`) and chapter markers (`الباب`, `الفصل`) and emits ordered provisions with a materialized `chapter/N` path; `normalizer.ts` canonicalizes Arabic orthography/whitespace.
 - **Classify** — `classifier.ts` derives `doc_type` and verifies language consistency; `authority_tier` is inherited from the source lineage, never assigned free-form.
 - **Validate** — `validator.ts` runs the INGESTION.md §9 quality gates; all must pass before anything becomes PUBLIC/retrievable.
-- **Version** — `hash.ts` computes `source_hash` (raw bytes) and `version_hash` (canonical content). A matching `source_hash` or `version_hash` under the same source returns `no_op` (idempotent). New versions get a provision-level `change_summary` (Modified/Added/Repealed) vs the previous version.
-- **Publish/Embed** — inserts `document_versions` + `legal_provisions` (server-elevated path) and ids idempotently into `embeddings`.
+- **Version** — `hash.ts` computes `source_hash` (raw bytes) and `version_hash` (canonical content). A matching `source_hash` or `version_hash` under the same source returns `no_op` (idempotent). New versions record a document-accurate `change_summary`: "Initial import" when no prior version exists for the same `official_number`, otherwise a provision-level diff (Modified/Added/Repealed) vs that document's prior version; `version_no` itself is a source-relative ordinal.
+- **Publish** — inserts `document_versions` + `legal_provisions` (server-elevated path).
+- **Relate** — `references.ts` publishes the intra-document graph: same-document `REFERENCES` edges parsed from provision text (including dual-article and numbered-paragraph forms; self-references and unresolved numbers suppressed), `PART_OF` edges for `N/M` provisions, and one `ARTICLE` citation envelope per provision with authority tier + effective date. All inserts are `ON CONFLICT DO NOTHING`, so re-publishing is idempotent (DATABASE.md §6.6; INGESTION.md §4.4).
+- **Embed/Index** — embeds ids idempotently into `embeddings`; the HNSW + GIN indexes over the public surface pick the new rows up via `v_public_retrieval_corpus`.
 
-Entry points: `scripts/ingest-document.ts` (CLI) and `tests/ingestion-tests.ts`.
+Entry points: `scripts/ingest-document.ts` (CLI), `tests/ingestion-tests.ts`, and `tests/relationships-tests.ts`.
 
 ### 4.3 Layer 3 — Retrieval (RAG.md)
 `lib/retrieval.ts` implements hybrid retrieval over the public surface:

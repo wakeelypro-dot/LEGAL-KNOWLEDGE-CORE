@@ -36,7 +36,7 @@ function parseArgs(argv: string[]): Args {
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i];
     if (!key.startsWith("--")) continue;
-    const name = key.slice(2).replace(/-([a-z])/g, (_m, c) => c.toUpperCase());
+    const name = key.slice(2).replace(/-/g, "_");
     const value = argv[i + 1];
     (args as Record<string, string | undefined>)[name] = value;
   }

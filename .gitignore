@@ -21,6 +21,9 @@ dist/
 # Vercel
 .vercel/
 
+# Generated artifacts (archify anonymization output)
+generated-archify/
+
 # OS / editor
 .DS_Store
 Thumbs.db
