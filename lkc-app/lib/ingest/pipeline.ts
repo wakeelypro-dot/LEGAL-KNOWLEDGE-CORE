@@ -146,6 +146,8 @@ export async function ingestDocument(opts: PipelineOptions): Promise<IngestRepor
       documentVersionId: null,
       provisionsIngested: 0,
       provisionsEmbedded: 0,
+      relationships: 0,
+      citations: 0,
       sourceHash: rawHash,
       versionHash: versionHashValue,
       gates,

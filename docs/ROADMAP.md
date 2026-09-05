@@ -2,7 +2,7 @@
 # Legal Knowledge Core (LKC) — Phased Development Roadmap
 
 **Version:** 1.0
-**Status:** Phases 0–4 delivered; Phase 5 delivered — RAG engine live (hybrid vector+keyword with Arabic normalization), gold-standard eval restored to .192/.958/.917 with 56 provisions
+**Status:** Phases 0–7 delivered; skill framework live (append-only skill/version/run model, sandboxed idempotent execution, production gate with per-skill test case + security review, skills API endpoints); Phase 6 citation+verification live; gold-standard eval .192/.958/.917 with 56 provisions
 **Last Updated:** 2026-09-05
 **Owner:** Lead Architect (AI Agent)
 **Companion Documents:** ARCHITECTURE.md, DATABASE.md, SECURITY.md, RAG.md
@@ -167,6 +167,16 @@ It is a Phase 0 architecture document. It is the sequencing plan — it does **n
 - Skill metadata/versioning model per `SKILLS.md` §2.
 - Execution runtime sandboxed and auditable; `skill_runs` logged (`SKILLS.md` §5; `SECURITY.md` §9).
 - Every production skill has a test case + security review (`SKILLS.md` §6.3; `TESTING.md` §6).
+
+**Progress (delivered):**
+- `0011_skills_framework.sql` applied: `skill_status` / `security_status` / `integration_status` / `risk_level` enums; `skills`, `skill_versions` (UNIQUE skill_id+version, append-only rows), `skill_test_cases`, `skill_runs` (UNIQUE idempotency_key, append-only trigger), `skill_sources` (provenance/license registry). High-risk skills force `requires_human_review` via CHECK.
+- `lib/skills.ts`: `createSkill` (stable `skill_id`, DRAFT start), append-only semver (`resolveActiveVersion` returns latest APPROVED/PUBLISHED), `assertProductionGate` (SECURITY.md §9 — no APPROVED/PUBLISHED without a PASSED review + ≥1 test case + ADAPTED_INTERNAL/LICENSED_INTEGRATION), `validateSkillContent` (data-only; embedded execution directives like `commands`/`exec`/`runtime`/`env` rejected — no code path can evaluate content), `executeSkill` (resolve → validate → gate → retrieve via `v_public_retrieval_corpus` → verified answer → logged run), `recordSkillRun` (Idempotency-Key-safe via `ON CONFLICT`).
+- API endpoints live → `API.md` §4.6 now implemented: `GET /api/v1/skills` (executable catalog), `GET /api/v1/skills/:id` (never exposes executable internals to non-admins), `POST /api/v1/skills/:id/execute` (returns `run_id`, `verification_status`, `citations`; idempotent by `Idempotency-Key`). Dynamic-route params use the Next 16 `Promise` shape.
+- Seeded internal production skill `jordan-legal-research` v1.0.0 APPROVED with test case `grounded-jordan-answer` + PASSED / ADAPTED_INTERNAL provenance — the reference for §6.3.
+- `tests/skills-tests.ts` — 49/49 PASS: canonical enums; seed-gate contract; content-as-data guard (11 directive keys rejected); append-only versioning (new version never mutates prior row; duplicate version rejected); production gate transitions (no review → FAILED → REFERENCE_ONLY → DRAFT → APPROVED); execution recording + CITED verification + secrets redaction + idempotent replay + append-only trigger rejects UPDATE/DELETE; fully-gated malicious skill still blocked by the content guard with zero run rows; REJECTED external candidate recorded never-executable; fixtures cleaned, corpus untouched (56/56).
+- Full regression suite green after 0011 (retrieval 14/14, ingestion 24/24, relationships 20/20, source-registry 34/34, security 19/19, citation 20/20, skills 49/49); eval stable P@5 .192, R@5 .958, isolation 0/24.
+
+**Remaining:** Phase 8 (external skill import lifecycle) and Phase 9 (Jordan skill authoring) build directly on this framework.
 
 ---
 

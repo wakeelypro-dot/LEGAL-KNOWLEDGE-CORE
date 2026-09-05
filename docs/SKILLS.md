@@ -15,6 +15,8 @@ This document defines the **Legal Skills** system (Layer 4 of LKC; `ARCHITECTURE
 
 It is a Phase 0 architecture document. It specifies design and contracts; it does **not** contain implementation code.
 
+**Implementation status:** the framework described here is live — `0011_skills_framework.sql` (enums, `skills`/`skill_versions`/`skill_test_cases`/`skill_runs`/`skill_sources`), `lib/skills.ts` (content guard, production gate, idempotent auditable execution), the `API.md` §4.6 endpoints, and `tests/skills-tests.ts` (49 checks). See `ROADMAP.md` §10.
+
 Companion: `EXTERNAL-SKILLS.md` covers the provenance/license/security gate for skills adopted from the open ecosystem.
 
 ---
@@ -148,9 +150,9 @@ A skill must **never** bypass the retrieval surface to reach raw tenant data. Al
 - Only versions with `status = APPROVED` / `PUBLISHED` are executable.
 - A `DEPRECATED` version is no longer selectable for new runs.
 
-### 5.4 Test Cases & Runs (`DATABASE.md` §6.13)
+### 5.4 Test Cases & Runs (`DATABASE.md` §6.10)
 - **Every production skill requires at least one automated test case** and a security review record (`PRD` §XVII-21).
-- `skill_test_cases` define expected inputs/outputs; `skill_runs` record live execution.
+- `skill_test_cases` define expected inputs/outputs; `skill_runs` record live execution (append-only; Idempotency-Key safe).
 - Regression gating: evaluation sets are re-run before any major release affecting skills (`RAG.md` §9.3).
 
 ---
@@ -181,7 +183,7 @@ A skill must **never** bypass the retrieval surface to reach raw tenant data. Al
 |-------|-----------|
 | Skills as Layer 4 | `ARCHITECTURE.md` §4, §5.5 |
 | Skills as plugins / moat | `ARCHITECTURE.md` §2.8, §12 |
-| Skill tables / enums | `DATABASE.md` §6.9–6.13, §4 (`skill_status`, `security_status`, `integration_status`) |
+| Skill tables / enums | `DATABASE.md` §6.10, §4 (`skill_status`, `security_status`, `integration_status`) |
 | Skill security | `SECURITY.md` §9 |
 | RAG integration / surface | `RAG.md` §4–§6 |
 | Execution endpoint | `API.md` §4.6 |

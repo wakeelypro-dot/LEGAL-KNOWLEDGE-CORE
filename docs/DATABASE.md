@@ -166,8 +166,18 @@ INGESTION.md §7.3 names `language` and `chunk_text` on embeddings rows — thes
 - `v_public_retrieval_corpus` — the single retrieval surface (0001 + 0005 `security_invoker`): PUBLIC provisions of PUBLIC, non-expired `document_versions` from CURRENT/VALIDATED/INGESTED docs of **ACTIVE** jurisdictions, with provenance (doc titles, official number, source name/url, authority tier, jurisdiction code). Temporal windows intersect at provision level.
 - `app` schema functions — `current_application_id()`, `current_user_id()`, `current_org_id()`, `current_matter_ids()`, `user_roles(uuid)`, `can_access(scope, owner_org, owner_app, owner_matter, owner_user)` — all null-safe against empty `request.jwt.claims` (0003, 0006).
 
-### 6.11 Planned — `skill_sources` (external skills provenance)
-The external-skill registry referenced by `EXTERNAL-SKILLS.md` (`integration_status`, license/provenance fields) is a later-phase table. Not present in migrations 0001–0008; added with the skills phase (ROADMAP.md §13+).
+### 6.10 Skills framework (0011_skills_framework.sql; SKILLS.md §2, §5, §6; SECURITY.md §9)
+Enums: `skill_status` (DRAFT/REVIEW/APPROVED/PUBLISHED/DEPRECATED/REJECTED), `security_status` (PENDING/PASSED/FAILED/NEEDS_REVIEW), `integration_status` (REFERENCE_ONLY/LICENSED_INTEGRATION/ADAPTED_INTERNAL/REJECTED), `risk_level` (low/medium/high).
+
+| Table | Purpose | Constraints |
+|---|---|---|
+| `skills` | stable skill identity + lifecycle | `skill_id` UNIQUE; CHECK (high risk ⇒ `requires_human_review`); status gate to APPROVED only via review |
+| `skill_versions` | semver snapshots; a new version is a NEW row, never a mutation | UNIQUE(skill_id, version); only APPROVED/PUBLISHED versions are executable |
+| `skill_test_cases` | automated conformance cases (input → expected output/verification) | FK skill_id; a version without its own case fails the production gate |
+| `skill_runs` | auditable execution log | UNIQUE(idempotency_key); append-only trigger `trg_skill_runs_append_only` rejects UPDATE/DELETE; `citations` jsonb, `inputs` secrets-redacted |
+| `skill_sources` | license/provenance registry for every skill — internal or external (EXTERNAL-SKILLS.md §5) | UNIQUE(source, name); REFERENCE_ONLY / REJECTED / FAILED security ⇒ never executable |
+
+Seed (0011): `jordan-legal-research` v1.0.0 APPROVED with one test case and a PASSED / ADAPTED_INTERNAL `skill_sources` row — the reference production skill.
 
 ---
 
