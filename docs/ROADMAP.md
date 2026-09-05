@@ -193,6 +193,14 @@ It is a Phase 0 architecture document. It is the sequencing plan — it does **n
 
 Prioritized targets: Legal Research, Citation Extraction, Legal Explanation, Matter Intake, Contract Review, Document Analysis, Case Analysis, Legal Drafting (`PRD` Phase 8).
 
+**Progress (2026-09-06):**
+- Audited the real public repository `lawve-ai/awesome-legal-skills` (collection license **CC BY-NC-ND 4.0**, ~258 skills, `main` branch). Repo facts confirmed via web + delegated research; no content copied.
+- Extracted **16 fact-checked candidates** — two per prioritized target — with exact skill dir names, authors, per-skill licenses (or UNVERIFIED where not asserted), versions, and jurisdiction. Decision + rationale recorded for each in the provenance registry (`EXTERNAL-SKILLS.md` §5; `DATABASE.md` §6.10).
+- **Delivered migration `0012_external_skill_catalog.sql`** (applied): populates `skill_sources` with the 16 candidates. All are `integration_status = REFERENCE_ONLY`, `security_status = NEEDS_REVIEW` — the collection's CC BY-NC-ND license (ND = no derivatives) and the §4 default posture mean **no candidate is integrated this phase**; none clears for execution. No external content is used; candidates are concept references only. UNVERIFIED frontmatter fields are labeled as such in notes (honesty constraint).
+- **License-integrity tests added** (`tests/external-skills-tests.ts`; `TESTING.md` §6) — 16 checks, all PASS: registry populated exactly, all 8 targets covered, complete auditable provenance, all REFERENCE_ONLY + NEEDS_REVIEW, zero production-backed external rows, the only production row is the original internal `jordan-legal-research` (PASSED/ADAPTED_INTERNAL), candidates structurally non-executable, catalog insert idempotent.
+
+**Status:** Phase 8 delivered (all prior phases 0–7 delivered).
+
 ---
 
 ## 12. Phase 9 — Jordan Skills

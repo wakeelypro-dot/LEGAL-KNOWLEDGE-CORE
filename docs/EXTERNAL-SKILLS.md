@@ -2,8 +2,8 @@
 # Legal Knowledge Core (LKC) — External Skill Governance
 
 **Version:** 1.0
-**Status:** Phase 0 — Architecture Freeze Candidate
-**Last Updated:** 2026-09-04
+**Status:** Phases 0 & 8 — Architecture Freeze Candidate + External Skill Catalog Delivered
+**Last Updated:** 2026-09-06
 **Owner:** Lead Architect (AI Agent)
 **Companion Documents:** ARCHITECTURE.md, DATABASE.md, SECURITY.md, SKILLS.md
 
@@ -14,6 +14,12 @@
 This document defines how the Legal Knowledge Core (LKC) governs skills sourced from the **open/external skill ecosystem** (notably the `lawve-ai/awesome-legal-skills` repository). It covers the discovery-and-benchmark posture, the full audit lifecycle, external skill states, provenance registry fields, the security scanner, the "never blindly import/execute" rules, and commercial-safety rules.
 
 It is a Phase 0 architecture document. It specifies design, policy, and contracts; it does **not** contain implementation code.
+
+**Implementation status (ROADMAP.md §11, delivered 2026-09-06):**
+- Per §3, the **Discover** and **Read** steps are complete for every Phase 8 candidate (16 total, two per prioritized target): the public repository and each skill's folder + `SKILL.md` frontmatter were reviewed. **License review** concluded identically for all 16: the collection is **CC BY-NC-ND 4.0** (ND = no derivatives) and §4 sets `REFERENCE_ONLY` as the default, so every candidate is **classified `REFERENCE_ONLY`** and **exits the lifecycle at that gate** — no security scan (Security review step), sandbox benchmark, or production admission was run this phase, correctly for the intended use (concept inspiration only).
+- Provenance registry (`skill_sources`) populated by migration `0012_external_skill_catalog.sql`; decisions recorded with rationale, source URL, license posture, and timestamp (`DATABASE.md` §6.10).
+- License-integrity tests (`tests/external-skills-tests.ts`; `TESTING.md` §6) pass 16/16. No external content is copied or executed; candidates are recorded references only.
+- This document's policy remains the operating contract for Phase 9 (concept-derived internal skills become `ADAPTED_INTERNAL` with their own provenance rows) and future re-invocation of the lifecycle when a license-cleared candidate merits integration.
 
 Companion: `SKILLS.md` defines the internal skill model and execution runtime that governs skills after they are admitted.
 

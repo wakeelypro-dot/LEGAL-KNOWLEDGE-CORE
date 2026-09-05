@@ -89,9 +89,10 @@ Test cases:
 - Changes to a skill require re-running its test cases and the relevant gold-standard set.
 
 **License integrity:**
-- Every integrated skill has a `skill_sources` provenance record with an `integration_status` of `LICENSED_INTEGRATION` or `ADAPTED_INTERNAL` (`EXTERNAL-SKILLS.md` §4–§5; `DATABASE.md` §6.11).
+- Every integrated skill has a `skill_sources` provenance record with an `integration_status` of `LICENSED_INTEGRATION` or `ADAPTED_INTERNAL` (`EXTERNAL-SKILLS.md` §4–§5; `DATABASE.md` §6.10).
 - No `REFERENCE_ONLY` / `REJECTED` skill is executable.
 - License compliance is asserted as part of the skill release gate.
+- Phase 8 external catalog: `tests/external-skills-tests.ts` asserts the provenance registry holds exactly the 16 audited `lawve-ai/awesome-legal-skills` candidates (all 8 prioritized targets), every candidate carries complete auditable provenance, none is `ADAPTED_INTERNAL`/`LICENSED_INTEGRATION` or `PASSED` (collection license CC BY-NC-ND 4.0 keeps them all `REFERENCE_ONLY` + `NEEDS_REVIEW`), the only production-backed registry row is the original internal `jordan-legal-research` (`PASSED`/`ADAPTED_INTERNAL`), and candidates are structurally non-executable (`ROADMAP.md` §11).
 
 ---
 

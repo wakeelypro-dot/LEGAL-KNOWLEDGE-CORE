@@ -179,6 +179,8 @@ Enums: `skill_status` (DRAFT/REVIEW/APPROVED/PUBLISHED/DEPRECATED/REJECTED), `se
 
 Seed (0011): `jordan-legal-research` v1.0.0 APPROVED with one test case and a PASSED / ADAPTED_INTERNAL `skill_sources` row — the reference production skill.
 
+Catalog (0012, Phase 8): `skill_sources` holds 16 audited candidates from the public `lawve-ai/awesome-legal-skills` repository (collection license **CC BY-NC-ND 4.0**), two per prioritized target (`ROADMAP.md` §11). All are `REFERENCE_ONLY` + `NEEDS_REVIEW` — recorded provenance only, never executable, no external content used. UNIQUE(source, name) + ON CONFLICT DO NOTHING keeps the insert idempotent. See `EXTERNAL-SKILLS.md` and `tests/external-skills-tests.ts`.
+
 ---
 
 ## 7. Append-Only Versioning & Idempotency
