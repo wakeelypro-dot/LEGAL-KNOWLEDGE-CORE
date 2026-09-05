@@ -96,11 +96,11 @@ Source → Fetch → Hash → Parse → Structure → Classify → Validate → 
 Entry points: `scripts/ingest-document.ts` (CLI), `tests/ingestion-tests.ts`, and `tests/relationships-tests.ts`.
 
 ### 4.3 Layer 3 — Retrieval (RAG.md)
-`lib/retrieval.ts` implements hybrid retrieval over the public surface:
-- **Semantic branch** — cosine similarity over `embeddings` (hnsw index).
-- **Keyword branch** — `ts_rank` over the `fts` tsvector (GIN).
-- **Fusion** — Reciprocal Rank Fusion (K=60).
-Both branches apply the identical hard filters **before** ranking (§2.2). Returned rows carry full provenance (provision id, document version id, doc titles, official number, source url, authority tier, jurisdiction, temporal window, `verification_status`).
+`lib/retrieval.ts` implements hybrid retrieval over the public surface, exposing the mode atoms (`RAG.md` §4.1) as named exports:
+- **`vectorRetrieve`** — cosine similarity over `embeddings` (hnsw index).
+- **`keywordRetrieve`** — `ts_rank` over the `fts` tsvector (GIN). The `fts` column is a GENERATED index over `to_tsvector('simple', lkc_ar_norm(...))` (migration 0010) and the query is normalized through the same `lkc_ar_norm`, so Arabic orthographic variance (أ/ا, ة/ه, ى/ي, optional tashkeel) is absorbed on both sides. Strategy: strict AND `plainto_tsquery` first; when that returns nothing, a stopword-filtered lexeme-OR query (built via `unnest(to_tsvector(...))`) recovers variant-phrased questions, ranked by `ts_rank`. Stops are compared in normalized space.
+- **`hybridRetrieve`** — Reciprocal Rank Fusion (K=60) of both branches, run concurrently (default mode).
+All branches apply the identical hard filters using the shared `hardFilters()` fragment **before** ranking (§2.2; `RAG.md` §5). Returned rows carry full provenance (provision id, document version id, doc titles, official number, source url, authority tier, jurisdiction, temporal window, `verification_status`) plus `source: vector|keyword|hybrid`.
 
 ### 4.4 Layer 4 — Skills (SKILLS.md)
 Skills framework + external-skill provenance/security scanning are a later phase (`ROADMAP.md` §13+; `SKILLS.md`; `EXTERNAL-SKILLS.md`). Not implemented in the deployed core; `DATABASE.md` §6.11 lists the planned `skill_sources` registry.

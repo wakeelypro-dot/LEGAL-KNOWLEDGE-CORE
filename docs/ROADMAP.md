@@ -2,7 +2,7 @@
 # Legal Knowledge Core (LKC) — Phased Development Roadmap
 
 **Version:** 1.0
-**Status:** Phases 0–3 delivered; Phase 4 in progress — 2 laws live (Civil Code, Labour Law), relationships & citations populated
+**Status:** Phases 0–4 delivered; Phase 5 delivered — RAG engine live (hybrid vector+keyword with Arabic normalization), gold-standard eval restored to .192/.958/.917 with 56 provisions
 **Last Updated:** 2026-09-05
 **Owner:** Lead Architect (AI Agent)
 **Companion Documents:** ARCHITECTURE.md, DATABASE.md, SECURITY.md, RAG.md
@@ -115,7 +115,7 @@ It is a Phase 0 architecture document. It is the sequencing plan — it does **n
 - **References & citations implemented** (`lib/ingest/references.ts`; INGESTION.md §4.4): same-document cross-article `REFERENCES` edges (single, dual, numbered-paragraph forms; Arabic prepositional markers like `للمادة`/`بالمادة` handled; self-references and unresolved numbers dropped), `PART_OF` edges for `N/M` provisions, and one `ARTICLE` citation envelope per provision (authority tier + effective date carried from source lineage). Migration `0009` adds idempotency constraints + indexes.
 - **Versioning is per-document semantics, per-source serial:** `version_no` remains a source-relative ordinal (UNIQUE(source_id, version_no)); `change_summary` is document-accurate ("Initial import" unless a prior version exists for the same `official_number`, otherwise a provision-level diff vs that prior version). Pipeline step 7b implements this; no prior version of the Labour Law exists, so it is recorded as an initial import.
 - **Tests:** `tests/relationships-tests.ts` (20 checks — extraction unit cases, citation envelope fields, edge correctness incl. self-ref/unresolved suppression, PART_OF, idempotent re-ingest, corpus-restore). Ingestion 24/24, registry 34/34, security 19/19 all green on the live DB.
-- **Eval re-baseline:** with the 48 Labour Law provisions joining the vector space, Civil-Code-only gold-standard metrics shifted mechanically — P@5 .192→.150, R@5 .958→.750, citation accuracy stable, jurisdiction isolation 0/24. Noted for Phase 5 (retrieval tuning/reranking) where the activation threshold applies.
+- **Eval re-baseline:** with the 48 Labour Law provisions joining the vector space, Civil-Code-only gold-standard metrics shifted mechanically — P@5 .192→.150, R@5 .958→.750, citation accuracy stable, jurisdiction isolation 0/24. **Resolved in Phase 5** (below): the keyword branch now re-grounds the eval on the full 56-provision corpus.
 - **Known limitation:** sourced full text carries no chapter headers, so Labour Law provisions are `chapter = NULL` (nothing fabricated); cited `حيثيات` etc. belong to later phases.
 
 ---
@@ -130,6 +130,14 @@ It is a Phase 0 architecture document. It is the sequencing plan — it does **n
 - Hard filters run before ranking (`RAG.md` §5).
 - Retrieval reads only from the public surface; private data cannot appear (`RAG.md` §6; `TESTING.md` §2, §7).
 - Gold-standard precision/recall/citation-accuracy meet the Jordan activation threshold (`RAG.md` §9; `JURISDICTIONS.md` §3.2).
+
+**Progress (2026-09-05):**
+- **Live RAG engine** (`lib/retrieval.ts`): mode atoms exported as `vectorRetrieve`, `keywordRetrieve`, `hybridRetrieve` (RRF K=60, ran concurrently). All three share the `hardFilters()` fragment — jurisdiction + in-force/as-of temporal window — applied **before** ranking; retrieval reads only from the public surface (isolation 0/24).
+- **Arabic-normalized keyword index (migration `0010`):** new IMMUTABLE `lkc_ar_norm()` (strip tashkeel/tatweel; fold أ-إ-آ→ا, ة→ه, ى→ي, ئ→ي, ؤ→و, drop ٱ ً standalone hamza; explode presentation lam-alef forms) regenerates `legal_provisions.fts` as a GENERATED column over `to_tsvector('simple', lkc_ar_norm(...))`. The keyword branch normalizes the query through the **same function**, so orthographic variance (أ/ا, ة/ه, ى/ي, optional diacritics) never separates a question from the article it cites.
+- **Keyword strategy — strict-AND then OR fallback:** a legal question rarely matches one article verbatim, so when the strict `plainto_tsquery` returns nothing the branch builds a stopword-filtered lexeme-OR query (via `unnest(to_tsvector(...))`, `char_length > 1`, Arabic function-word stop list stored in normalized space) ranked by `ts_rank`. This resurrected a previously dead keyword path (`plainto_tsquery` over the whole non-normalized question returned 0 hits).
+- **Eval restored on the full 56-provision corpus:** **P@5 .192, R@5 .958, citation accuracy .917, jurisdiction isolation 0/24** — equal to the pre-Labour Civil-Code baseline despite 48 competing Labour provisions. Branch diagnostics: keyword-only would recover 23/24 gold questions, vector-only 17/24. Remaining misses are gs-004 (temporal-scope phrasing) and gs-024 (fault-definition phrasing), both also missed in the pre-Labour baseline (documented, not a regression); gs-004 is now keyword-recoverable but RRF reordering drops it from the hybrid top-5 — flagged for Phase 6+ rerank tuning (authority/temporal signals, `RAG.md` §4.2).
+- **Tests:** `tests/retrieval-tests.ts` (14 checks — `lkc_ar_norm` contract, fts integrity 56/56 populated, strict-AND alive, OR-fallback variant recovery, vector/hybrid targeting, hard-filter exclusion, isolation, corpus restore). Full suite green: retrieval 14/14, ingestion 24/24, registry 34/34, security 19/19, relationships 20/20.
+- **Docs:** DATABASE.md §6.5 (fts generated+normalized), RAG.md §10.1 (normalization & keyword strategy contract), ARCHITECTURE.md §4.3 (mode atoms + lkc_ar_norm), this section.
 
 ---
 

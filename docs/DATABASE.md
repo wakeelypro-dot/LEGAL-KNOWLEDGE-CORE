@@ -129,7 +129,7 @@ Provision (article/paragraph/item) rows — the unit of retrieval.
 | `status` | document_status | `CURRENT` |
 | `verification_status` | verification_status | default `CITED` (RAG.md §8.3) |
 | `visibility_scope` | visibility_scope | default `PUBLIC` |
-| `fts` | tsvector | keyword index column — GENERATED on the live DB (PoC bootstrap expression over heading/body; ingestion never sets it). GIN index. Retrieval uses `plainto_tsquery('simple', …)`. |
+| `fts` | tsvector | Arabic-normalized keyword index — GENERATED column `to_tsvector('simple', lkc_ar_norm(coalesce(heading,'')||' '||coalesce(body_text,'')))` (0010). GIN index `idx_prov_fts`. Ingestion never sets it; retrieval matches with the same `lkc_ar_norm` on the query side (RAG.md §10.1). |
 
 ### 6.6 `legal_relationships` & `legal_citations`
 - `legal_relationships` — `(parent_provision_id, child_provision_id, relationship_type)` UNIQUE (0009); types per `relationship_type` enum. **Populated by the ingest Relate stage** (INGESTION.md §4.4) for the Jordan corpus:
