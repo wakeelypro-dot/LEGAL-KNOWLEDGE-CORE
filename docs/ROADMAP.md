@@ -2,8 +2,8 @@
 # Legal Knowledge Core (LKC) — Phased Development Roadmap
 
 **Version:** 1.0
-**Status:** Phase 0 — Architecture Freeze Candidate
-**Last Updated:** 2026-09-04
+**Status:** Phases 0–3 delivered; Phase 4 (RAG engine scale-out) next
+**Last Updated:** 2026-09-05
 **Owner:** Lead Architect (AI Agent)
 **Companion Documents:** ARCHITECTURE.md, DATABASE.md, SECURITY.md, RAG.md
 
