@@ -53,6 +53,10 @@ async function main() {
   if (jur.length === 0) throw new Error("JO missing (run seed migration)");
   const joId = jur[0].id;
 
+  // Self-heal: remove any rows left by crashed previous runs (see below for
+  // cleanupTestSources). Callable before its textual definition via hoisting.
+  await cleanupTestSources();
+
   // ---------- Setup: public surface baseline ----------
   const corpusBefore = await query<{ n: string }>(
     `SELECT count(*)::text AS n FROM v_public_retrieval_corpus`
@@ -73,6 +77,27 @@ async function main() {
      VALUES ($1,$2,'PRIMARY','TIER_1_PRIMARY_OFFICIAL','CURRENT')`,
     [aeJur[0].id, TEST_SOURCE]
   );
+
+  // ---------- Cleanup (self-healing: also scavenges rows left by crashed runs) ----------
+  async function cleanupTestSources() {
+    await query(
+      `DELETE FROM embeddings e USING legal_provisions p, document_versions d, legal_sources s
+       WHERE e.provision_id = p.id AND p.document_version_id = d.id
+         AND d.source_id = s.id AND s.name LIKE 'Ingestion Test Source %'`
+    );
+    await query(
+      `DELETE FROM legal_provisions WHERE document_version_id IN
+         (SELECT d.id FROM document_versions d JOIN legal_sources s ON d.source_id = s.id
+          WHERE s.name LIKE 'Ingestion Test Source %')`
+    );
+    await query(
+      `DELETE FROM document_versions WHERE source_id IN
+         (SELECT id FROM legal_sources WHERE name LIKE 'Ingestion Test Source %')`
+    );
+    await query(`DELETE FROM legal_sources WHERE name LIKE 'Ingestion Test Source %'`);
+  }
+
+  try {
 
   // ---------- 0. Parser unit ----------
   console.log("\n--- Parser (INGESTION.md §4.1) ---");
@@ -141,6 +166,45 @@ async function main() {
     check("no duplicate embeddings after re-ingest", embAfter[0].n === "3",
       `rows=${embAfter[0].n}`);
 
+    // ---------- 2b. Provenance persisted (INGESTION.md §3.3, §5.1) ----------
+    const provRow = await query<Record<string, unknown>>(
+      `SELECT raw_content, parsed_content, change_summary FROM document_versions WHERE id = $1`,
+      [report.documentVersionId!]
+    );
+    check("raw_content preserved", provRow[0].raw_content === RAW_DOC);
+    const parsed =
+      typeof provRow[0].parsed_content === "string"
+        ? JSON.parse(provRow[0].parsed_content as string)
+        : provRow[0].parsed_content;
+    check("parsed_content stored as structured JSON (3 provisions)",
+      Array.isArray((parsed as { provisions?: unknown[] }).provisions) &&
+        (parsed as { provisions: unknown[] }).provisions.length === 3);
+    check("change_summary recorded (initial import)",
+      provRow[0].change_summary === "Initial import", String(provRow[0].change_summary));
+
+    // ---------- 2c. Version detector: same canonical content, different bytes ----------
+    // Re-OCR/reformat produces a different source_hash but identical normalized
+    // content → version_hash matches → no new version (INGESTION.md §5.2, §6).
+    const REFLOWED_DOC = RAW_DOC.replace(/\n/g, "\n\n") + "\n";
+    check("reflowed doc differs at byte level", REFLOWED_DOC !== RAW_DOC);
+    const v2 = await ingestDocument({
+      jurisdiction: "JO",
+      sourceName: TEST_SOURCE,
+      rawText: REFLOWED_DOC,
+      meta: doc,
+    });
+    check("version detector: same content → no_op", v2.action === "no_op",
+      JSON.stringify(v2.action));
+    check("version detector: reuses original version", v2.documentVersionId === report.documentVersionId);
+    check("version detector: no new version row", v2.change?.isNewVersion === false);
+    const versionCount = await query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM document_versions
+       WHERE source_id IN
+         (SELECT id FROM legal_sources WHERE name = $1 AND jurisdiction = $2)`,
+      [TEST_SOURCE, joId]
+    );
+    check("only one document_version exists", versionCount[0].n === "1", `rows=${versionCount[0].n}`);
+
     // ---------- 3. Quality gate: non-ACTIVE jurisdiction rejected ----------
     console.log("\n--- Quality gates (INGESTION.md §9) ---");
     const bad = await ingestDocument({
@@ -158,25 +222,12 @@ async function main() {
        JOIN jurisdictions j ON j.id = d.jurisdiction WHERE j.code='AE' AND d.source_hash = $1`,
       [bad.sourceHash]
     );
-    check("nothing published for rejected doc", aeCount[0].n === "0");
+check("nothing published for rejected doc", aeCount[0].n === "0");
   }
 
-  // ---------- Cleanup (self-healing: also scavenges rows left by crashed runs) ----------
-  await query(
-    `DELETE FROM embeddings e USING legal_provisions p, document_versions d, legal_sources s
-     WHERE e.provision_id = p.id AND p.document_version_id = d.id
-       AND d.source_id = s.id AND s.name LIKE 'Ingestion Test Source %'`
-  );
-  await query(
-    `DELETE FROM legal_provisions WHERE document_version_id IN
-       (SELECT d.id FROM document_versions d JOIN legal_sources s ON d.source_id = s.id
-        WHERE s.name LIKE 'Ingestion Test Source %')`
-  );
-  await query(
-    `DELETE FROM document_versions WHERE source_id IN
-       (SELECT id FROM legal_sources WHERE name LIKE 'Ingestion Test Source %')`
-  );
-  await query(`DELETE FROM legal_sources WHERE name LIKE 'Ingestion Test Source %'`);
+  } finally {
+    await cleanupTestSources();
+  }
 
   const corpusAfter = await query<{ n: string }>(
     `SELECT count(*)::text AS n FROM v_public_retrieval_corpus`

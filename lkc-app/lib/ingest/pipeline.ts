@@ -169,20 +169,76 @@ export async function ingestDocument(opts: PipelineOptions): Promise<IngestRepor
     };
   }
 
-  // ---- 7. Version detection: next version_no for this source ----
+  // ---- 7. Version detection (INGESTION.md §5.2, §6) ----
+  // If the SAME canonical content already exists under this source under a
+  // different raw source_hash (re-OCR / reformat), it is the same version:
+  // no new version is created (version_hash is globally UNIQUE in the DB).
+  const sameVersion = await query<{ id: string }>(
+    `SELECT id FROM document_versions WHERE source_id = $1 AND version_hash = $2`,
+    [source.id, versionHashValue]
+  );
+  if (sameVersion.length > 0) {
+    return {
+      action: "no_op",
+      jurisdiction: opts.jurisdiction,
+      source: source.name,
+      documentVersionId: sameVersion[0].id,
+      provisionsIngested: 0,
+      provisionsEmbedded: 0,
+      sourceHash: rawHash,
+      versionHash: versionHashValue,
+      gates,
+      reasons: [`duplicate version_hash: canonical content already ingested as document ${sameVersion[0].id}`],
+      change: { isNewVersion: false, versionNo: 0 },
+    };
+  }
+
   const last = await query<{ v: number }>(
     `SELECT COALESCE(MAX(version_no), 0) AS v FROM document_versions WHERE source_id = $1`,
     [source.id]
   );
   const versionNo = last[0].v + 1;
 
+  // ---- 7b. Provision-level change summary (INGESTION.md §6.2) ----
+  // Diff vs the previous version (Modified / Added / Repealed) when this is
+  // not the first version; "initial import" for version 1.
+  let changeSummary = "Initial import";
+  if (versionNo > 1) {
+    const prev = await query<Record<string, unknown> & { provision_no: string; body_text: string }>(
+      `SELECT provision_no, body_text FROM legal_provisions
+       WHERE document_version_id = (
+         SELECT id FROM document_versions WHERE source_id = $1 AND version_no = $2)
+       ORDER BY position`,
+      [source.id, versionNo - 1]
+    );
+    const prevMap = new Map(prev.map((p) => [p.provision_no, normalizeText(p.body_text)]));
+    let modified = 0;
+    let added = 0;
+    let repealed = 0;
+    for (const p of doc.provisions) {
+      const body = normalizeText(p.text);
+      const prior = prevMap.get(p.no);
+      if (prior === undefined) added += 1;
+      else if (prior !== body) modified += 1;
+    }
+    for (const p of prev) if (!doc.provisions.some((c) => c.no === p.provision_no)) repealed += 1;
+    const parts: string[] = [];
+    if (added > 0) parts.push(`${added} added`);
+    if (modified > 0) parts.push(`${modified} modified`);
+    if (repealed > 0) parts.push(`${repealed} repealed`);
+    changeSummary = `Version ${versionNo}: ${
+      parts.length > 0 ? parts.join(", ") : "no provision-level change"
+    }`;
+  }
+
   // ---- 8. Publish (server-elevated path) ----
   const dv = await query<{ id: string }>(
     `INSERT INTO document_versions
        (source_id, jurisdiction, title_ar, title_en, doc_type, version_no,
         official_number, status, language, source_hash, version_hash,
-        effective_from, effective_until, visibility_scope)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,'CURRENT',$8,$9,$10,$11,$12,$13)
+        effective_from, effective_until, visibility_scope,
+        raw_content, parsed_content, change_summary, publication_date)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,'CURRENT',$8,$9,$10,$11,$12,$13,$14,$15,$16,current_date)
      ON CONFLICT (source_id, version_no) DO UPDATE SET updated_at = now()
      RETURNING id`,
     [
@@ -193,6 +249,18 @@ export async function ingestDocument(opts: PipelineOptions): Promise<IngestRepor
       rawHash, versionHashValue,
       opts.meta.effective_from, opts.meta.effective_until ?? null,
       visibility,
+      opts.rawText,
+      JSON.stringify({
+        titleAr: doc.titleAr,
+        titleEn: doc.titleEn,
+        docType,
+        officialNumber: doc.officialNumber,
+        effectiveFrom: doc.effectiveFrom,
+        effectiveUntil: doc.effectiveUntil,
+        language: doc.language,
+        provisions: doc.provisions,
+      }),
+      changeSummary,
     ]
   );
   const documentVersionId = dv[0].id;
